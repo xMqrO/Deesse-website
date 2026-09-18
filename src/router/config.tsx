@@ -18,7 +18,6 @@ import AdminDiscounts from "@/pages/admin/discounts/page";
 import AdminReviews from "@/pages/admin/reviews/page";
 import AdminAnalytics from "@/pages/admin/analytics/page";
 import AdminProfile from "@/pages/admin/profile/page";
-import SourceCodePage from "@/pages/src-code/page";
 
 const routes: RouteObject[] = [
   {
@@ -48,10 +47,6 @@ const routes: RouteObject[] = [
       { path: "analytics", element: <AdminAnalytics /> },
       { path: "profile", element: <AdminProfile /> },
     ],
-  },
-  {
-    path: "/src-code",
-    element: <SourceCodePage />,
   },
   {
     path: "*",

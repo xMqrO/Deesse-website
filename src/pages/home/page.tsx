@@ -16,9 +16,10 @@ import Reveal from '@/components/base/Reveal';
 import AnimatedHeading from '@/components/base/AnimatedHeading';
 import Parallax from '@/components/base/Parallax';
 import { Link } from 'react-router-dom';
-import { products } from '@/mocks/products';
+import { useStorefrontProducts } from '@/context/ProductContext';
 
 export default function Home() {
+  const products = useStorefrontProducts();
   const newArrivals = products.filter((p) => p.tags.includes('New')).slice(0, 4);
 
   return (

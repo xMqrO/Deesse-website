@@ -1,4 +1,27 @@
+export type ProductStatus = 'Active' | 'Draft' | 'Out of Stock';
+
 export interface Product {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  compareAtPrice?: number;
+  image: string;
+  images: string[];
+  tagline: string;
+  description: string;
+  rating: number;
+  reviews: number;
+  shades?: string[];
+  tags: string[];
+  stock: number;
+  sku?: string;
+  status: ProductStatus;
+  featured: boolean;
+  linkPreviewDescription?: string;
+}
+
+interface ProductSeed {
   id: string;
   name: string;
   category: string;
@@ -13,7 +36,6 @@ export interface Product {
 }
 
 export const categories = [
-  'All',
   'Skincare',
   'Makeup',
   'Fragrance',
@@ -21,7 +43,57 @@ export const categories = [
   'Hair Care',
 ] as const;
 
-export const products: Product[] = [
+export const statusOptions: ProductStatus[] = ['Active', 'Draft', 'Out of Stock'];
+
+export const tagOptions = ['Bestseller', 'New', 'Icon', 'Limited', 'Vegan', 'Gift'];
+
+export function slugify(value: string): string {
+  return (
+    value
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '') || 'product'
+  );
+}
+
+export function productImages(product: Pick<Product, 'image' | 'images'>): string[] {
+  if (product.images && product.images.length > 0) return product.images.filter(Boolean);
+  return product.image ? [product.image] : [];
+}
+
+export function normalizeProduct(input: Partial<Product> = {}, index = 0): Product {
+  const rawImages =
+    input.images && input.images.length > 0 ? input.images : input.image ? [input.image] : [];
+  const images = rawImages.filter((src): src is string => typeof src === 'string' && src.length > 0);
+  const stock = typeof input.stock === 'number' ? input.stock : (index * 13 + 7) % 46;
+  const status: ProductStatus = input.status ?? (stock === 0 ? 'Out of Stock' : 'Active');
+  const tags = Array.isArray(input.tags) ? input.tags : [];
+  return {
+    id: input.id || `product-${index + 1}`,
+    name: input.name || 'Untitled product',
+    category: input.category || 'Uncategorized',
+    price: typeof input.price === 'number' ? input.price : 0,
+    compareAtPrice:
+      typeof input.compareAtPrice === 'number' ? input.compareAtPrice : undefined,
+    image: images[0] || '',
+    images,
+    tagline: input.tagline || '',
+    description: input.description || '',
+    rating: typeof input.rating === 'number' ? input.rating : 5,
+    reviews: typeof input.reviews === 'number' ? input.reviews : 0,
+    shades: input.shades,
+    tags,
+    stock,
+    sku: input.sku,
+    status,
+    featured: input.featured ?? tags.includes('Bestseller'),
+    linkPreviewDescription: input.linkPreviewDescription,
+  };
+}
+
+const seedProducts: ProductSeed[] = [
   {
     id: 'velvet-rouge-lipstick',
     name: 'Velvet Rouge Lipstick',
@@ -425,6 +497,8 @@ export const products: Product[] = [
     tags: ['New', 'Bestseller'],
   },
 ];
+
+export const products: Product[] = seedProducts.map((p, i) => normalizeProduct(p, i));
 
 export const testimonials = [
   {

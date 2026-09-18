@@ -1,22 +1,34 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { products } from '@/mocks/products';
+import { useStorefrontProducts } from '@/context/ProductContext';
 import { useCart } from '@/context/CartContext';
 import ProductCard from '@/components/feature/ProductCard';
 
 export default function ProductDetail() {
   const { id } = useParams();
+  const products = useStorefrontProducts();
   const product = products.find((p) => p.id === id);
   const { addToCart } = useCart();
 
   const [shade, setShade] = useState<string | undefined>(product?.shades?.[0]);
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
+  const [activeImage, setActiveImage] = useState(0);
 
   useEffect(() => {
     setShade(product?.shades?.[0]);
     setQuantity(1);
+    setActiveImage(0);
   }, [product?.id, product?.shades]);
+
+  const images = product
+    ? product.images && product.images.length > 0
+      ? product.images
+      : product.image
+        ? [product.image]
+        : []
+    : [];
+  const soldOut = !!product && (product.stock <= 0 || product.status === 'Out of Stock');
 
   const related = useMemo(
     () => products.filter((p) => p.category === product?.category && p.id !== product?.id).slice(0, 4),
@@ -41,6 +53,7 @@ export default function ProductDetail() {
   }
 
   const handleAdd = () => {
+    if (soldOut) return;
     addToCart(product, shade, quantity);
     setAdded(true);
     setTimeout(() => setAdded(false), 2200);
@@ -67,13 +80,38 @@ export default function ProductDetail() {
           <div data-product-shop className="relative">
             <div className="group relative aspect-[4/5] overflow-hidden rounded-lg bg-background-900">
               <img
-                src={product.image}
+                src={images[activeImage] ?? product.image}
                 alt={`${product.name} — luxury beauty`}
                 title={`${product.name} — luxury beauty`}
                 className="h-full w-full object-cover object-top transition-transform duration-[1400ms] ease-out group-hover:scale-110"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-background-950/20 to-transparent" />
+              {soldOut && (
+                <span className="absolute right-4 top-4 rounded-full bg-background-950/85 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.15em] text-foreground-200">
+                  Sold out
+                </span>
+              )}
             </div>
+            {images.length > 1 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {images.map((src, i) => (
+                  <button
+                    key={`${src.slice(0, 24)}-${i}`}
+                    type="button"
+                    onClick={() => setActiveImage(i)}
+                    aria-label={`View image ${i + 1}`}
+                    aria-current={activeImage === i}
+                    className={`h-16 w-14 overflow-hidden rounded-md border transition-colors cursor-pointer ${
+                      activeImage === i
+                        ? 'border-primary-500'
+                        : 'border-background-700 hover:border-foreground-400'
+                    }`}
+                  >
+                    <img src={src} alt="" className="h-full w-full object-cover object-top" />
+                  </button>
+                ))}
+              </div>
+            )}
             {product.tags.map((t) => (
               <span
                 key={t}
@@ -168,9 +206,10 @@ export default function ProductDetail() {
               <button
                 type="button"
                 onClick={handleAdd}
-                className="flex-1 whitespace-nowrap rounded-full bg-primary-500 px-8 py-3 text-sm font-medium uppercase tracking-[0.15em] text-foreground-50 hover:bg-primary-600 transition-colors cursor-pointer"
+                disabled={soldOut}
+                className="flex-1 whitespace-nowrap rounded-full bg-primary-500 px-8 py-3 text-sm font-medium uppercase tracking-[0.15em] text-foreground-50 hover:bg-primary-600 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:bg-background-700 disabled:text-foreground-400"
               >
-                {added ? 'Added to Bag' : 'Add to Bag'}
+                {soldOut ? 'Sold out' : added ? 'Added to Bag' : 'Add to Bag'}
               </button>
             </div>
 

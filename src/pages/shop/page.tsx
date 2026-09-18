@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import ProductCard from '@/components/feature/ProductCard';
-import { products, categories } from '@/mocks/products';
+import { useProducts, useStorefrontProducts } from '@/context/ProductContext';
 
 const sortOptions = [
   { value: 'featured', label: 'Featured' },
@@ -12,6 +12,9 @@ const sortOptions = [
 
 export default function Shop() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { categories } = useProducts();
+  const products = useStorefrontProducts();
+  const categoryOptions = useMemo(() => ['All', ...categories], [categories]);
   const category = searchParams.get('category') || 'All';
   const tag = searchParams.get('tag') || '';
   const [sort, setSort] = useState('featured');
@@ -29,7 +32,7 @@ export default function Shop() {
     else if (sort === 'price-desc') list = [...list].sort((a, b) => b.price - a.price);
     else if (sort === 'rating') list = [...list].sort((a, b) => b.rating - a.rating);
     return list;
-  }, [category, tag, sort]);
+  }, [products, category, tag, sort]);
 
   const setCategory = (c: string) => {
     const params = new URLSearchParams();
@@ -54,7 +57,7 @@ export default function Shop() {
         {/* Filters */}
         <div className="mt-12 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            {categories.map((c) => (
+            {categoryOptions.map((c) => (
               <button
                 key={c}
                 type="button"

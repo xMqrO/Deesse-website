@@ -5,6 +5,8 @@ import { I18nextProvider } from "react-i18next";
 import i18n from "@/i18n";
 import { CartProvider } from "@/context/CartContext";
 import { SocialProvider } from "@/context/SocialContext";
+import { ProductProvider } from "@/context/ProductContext";
+import { SiteSettingsProvider } from "@/context/SiteSettingsContext";
 
 function ScrollManager() {
   const { pathname, hash } = useLocation();
@@ -24,14 +26,18 @@ function ScrollManager() {
 function App() {
   return (
     <I18nextProvider i18n={i18n}>
-      <SocialProvider>
-        <CartProvider>
-          <BrowserRouter basename={__BASE_PATH__}>
-            <ScrollManager />
-            <AppRoutes />
-          </BrowserRouter>
-        </CartProvider>
-      </SocialProvider>
+      <SiteSettingsProvider>
+        <ProductProvider>
+          <SocialProvider>
+            <CartProvider>
+              <BrowserRouter basename={__BASE_PATH__}>
+                <ScrollManager />
+                <AppRoutes />
+              </BrowserRouter>
+            </CartProvider>
+          </SocialProvider>
+        </ProductProvider>
+      </SiteSettingsProvider>
     </I18nextProvider>
   );
 }

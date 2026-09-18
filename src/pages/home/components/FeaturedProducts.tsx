@@ -2,10 +2,13 @@ import { Link } from 'react-router-dom';
 import ProductCard from '@/components/feature/ProductCard';
 import Reveal from '@/components/base/Reveal';
 import AnimatedHeading from '@/components/base/AnimatedHeading';
-import { products } from '@/mocks/products';
+import { useStorefrontProducts } from '@/context/ProductContext';
 
 export default function FeaturedProducts() {
-  const featured = products.filter((p) => p.tags.includes('Bestseller')).slice(0, 8);
+  const products = useStorefrontProducts();
+  const featured = products
+    .filter((p) => p.featured || p.tags.includes('Bestseller'))
+    .slice(0, 8);
 
   return (
     <section className="relative mx-auto max-w-7xl px-4 md:px-6 py-20 md:py-28">

@@ -3,7 +3,7 @@ import Panel from '@/components/admin/ui/Panel';
 import Badge from '@/components/admin/ui/Badge';
 import Modal from '@/components/admin/ui/Modal';
 import { useDiscounts } from '@/hooks/useDiscounts';
-import { categories, products } from '@/mocks/products';
+import { useProducts } from '@/context/ProductContext';
 import type { Discount, DiscountType } from '@/mocks/discounts';
 
 interface Draft {
@@ -54,6 +54,7 @@ const labelClass = 'text-xs uppercase tracking-[0.15em] text-foreground-500';
 
 export default function AdminDiscounts() {
   const { discounts, create, update, remove, toggle } = useDiscounts();
+  const { categories, products } = useProducts();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Discount | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -408,13 +409,11 @@ export default function AdminDiscounts() {
                 onChange={(e) => setDraft({ ...draft, category: e.target.value })}
                 className={`mt-2 cursor-pointer ${inputClass}`}
               >
-                {categories
-                  .filter((c) => c !== 'All')
-                  .map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
+                {categories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
               </select>
             </div>
           )}

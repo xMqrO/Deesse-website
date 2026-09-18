@@ -1,11 +1,13 @@
 import { Link } from 'react-router-dom';
 import Parallax from '@/components/base/Parallax';
 import MagneticButton from '@/components/base/MagneticButton';
-import { products } from '@/mocks/products';
+import { useStorefrontProducts } from '@/context/ProductContext';
 
 export default function Hero() {
+  const products = useStorefrontProducts();
   const floatA = products.find((p) => p.id === 'velvet-rouge-lipstick') ?? products[0];
-  const floatB = products.find((p) => p.id === 'lumiere-radiance-serum') ?? products[1];
+  const floatB =
+    products.find((p) => p.id === 'lumiere-radiance-serum') ?? products[1] ?? products[0];
 
   return (
     <section className="grain relative flex min-h-[100svh] w-full items-center justify-center overflow-hidden">
@@ -23,6 +25,7 @@ export default function Hero() {
       </div>
 
       {/* Floating product chips (desktop) */}
+      {floatA && floatB && (
       <div className="pointer-events-none absolute inset-0 hidden lg:block">
         <div className="animate-float absolute left-[6%] top-[22%] w-36">
           <Link
@@ -65,6 +68,7 @@ export default function Hero() {
           </Link>
         </div>
       </div>
+      )}
 
       {/* Content */}
       <div className="relative z-10 w-full px-4 md:px-6 text-center">

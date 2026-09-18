@@ -1,13 +1,7 @@
 import { Link } from 'react-router-dom';
 import Newsletter from '@/components/feature/Newsletter';
 import { useSocials } from '@/context/SocialContext';
-
-const shopLinks = [
-  { label: 'Skincare', to: '/shop?category=Skincare' },
-  { label: 'Makeup', to: '/shop?category=Makeup' },
-  { label: 'Fragrance', to: '/shop?category=Fragrance' },
-  { label: 'Bestsellers', to: '/shop?tag=Bestseller' },
-];
+import { useProducts } from '@/context/ProductContext';
 
 const helpLinks = [
   { label: 'Shipping & Returns', to: '/' },
@@ -18,7 +12,13 @@ const helpLinks = [
 
 export default function Footer() {
   const { socials } = useSocials();
+  const { categories } = useProducts();
   const visibleSocials = socials.filter((s) => s.enabled && s.url.trim());
+
+  const shopLinks = [
+    ...categories.map((c) => ({ label: c, to: `/shop?category=${encodeURIComponent(c)}` })),
+    { label: 'Bestsellers', to: '/shop?tag=Bestseller' },
+  ];
 
   return (
     <footer className="relative border-t border-background-800 bg-background-950 text-foreground-200">

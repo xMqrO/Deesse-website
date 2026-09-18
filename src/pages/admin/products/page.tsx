@@ -2,57 +2,81 @@ import { useMemo, useState } from 'react';
 import Panel from '@/components/admin/ui/Panel';
 import Badge, { toneForStatus } from '@/components/admin/ui/Badge';
 import Modal from '@/components/admin/ui/Modal';
-import { products as catalog, categories } from '@/mocks/products';
+import ProductForm from '@/components/admin/ProductForm';
+import { useProducts } from '@/context/ProductContext';
+import { useSiteSettings, DEFAULT_SITE_SETTINGS } from '@/context/SiteSettingsContext';
+import {
+  normalizeProduct,
+  slugify,
+  type Product,
+  type ProductStatus,
+} from '@/mocks/products';
 
-interface Row {
-  id: string;
-  name: string;
-  category: string;
-  price: number;
-  stock: number;
-  sold: number;
-  image: string;
-  status: 'Active' | 'Draft' | 'Out of Stock';
-}
-
-const initialRows: Row[] = catalog.map((p, i) => {
-  const stock = (i * 13 + 7) % 46;
-  return {
-    id: p.id,
-    name: p.name,
-    category: p.category,
-    price: p.price,
-    image: p.image,
-    stock,
-    sold: ((i * 29 + 11) % 420) + 40,
-    status: stock === 0 ? 'Out of Stock' : i % 7 === 5 ? 'Draft' : 'Active',
-  };
+const emptyDraft = (defaultCategory: string): Product => ({
+  id: '',
+  name: '',
+  category: defaultCategory,
+  price: 0,
+  compareAtPrice: undefined,
+  image: '',
+  images: [],
+  tagline: '',
+  description: '',
+  rating: 5,
+  reviews: 0,
+  shades: undefined,
+  tags: [],
+  stock: 10,
+  sku: '',
+  status: 'Active',
+  featured: false,
+  linkPreviewDescription: '',
 });
 
-const emptyDraft = {
-  name: '',
-  category: 'Skincare',
-  price: '',
-  stock: '',
-};
+const inputClass =
+  'rounded-lg border border-background-800 bg-background-900 px-3 py-2.5 text-sm text-foreground-200 outline-none focus:border-primary-500/60 cursor-pointer';
 
 export default function AdminProducts() {
-  const [rows, setRows] = useState<Row[]>(initialRows);
+  const {
+    products,
+    categories,
+    addProduct,
+    updateProduct,
+    deleteProduct,
+    duplicateProduct,
+    resetProducts,
+    addCategory,
+    renameCategory,
+    deleteCategory,
+  } = useProducts();
+  const { settings, updateSettings, resetSettings } = useSiteSettings();
+
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
   const [sort, setSort] = useState<'name' | 'price-asc' | 'price-desc' | 'stock'>('name');
   const [view, setView] = useState<'table' | 'grid'>('table');
   const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<Row | null>(null);
-  const [draft, setDraft] = useState(emptyDraft);
-  const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Product>(() => emptyDraft(categories[0] ?? 'Skincare'));
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
+
+  const [newCategory, setNewCategory] = useState('');
+  const [editingCat, setEditingCat] = useState<string | null>(null);
+  const [catValue, setCatValue] = useState('');
+
+  const [preview, setPreview] = useState(settings);
+  const [previewSaved, setPreviewSaved] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let list = rows.filter(
+    let list = products.filter(
       (r) =>
         (category === 'All' || r.category === category) &&
-        (q === '' || r.name.toLowerCase().includes(q) || r.id.includes(q))
+        (q === '' ||
+          r.name.toLowerCase().includes(q) ||
+          r.id.includes(q) ||
+          r.tags.join(' ').toLowerCase().includes(q))
     );
     list = [...list].sort((a, b) => {
       if (sort === 'price-asc') return a.price - b.price;
@@ -61,81 +85,89 @@ export default function AdminProducts() {
       return a.name.localeCompare(b.name);
     });
     return list;
-  }, [rows, query, category, sort]);
+  }, [products, query, category, sort]);
+
+  const applyDraft = (patch: Partial<Product>) => {
+    setDraft((prev) => {
+      const merged: Product = { ...prev, ...patch };
+      merged.images = merged.images ?? [];
+      merged.image = merged.images[0] ?? '';
+      return merged;
+    });
+  };
 
   const openCreate = () => {
-    setEditing(null);
-    setDraft(emptyDraft);
+    setEditingId(null);
+    setDraft(emptyDraft(categories[0] ?? 'Skincare'));
     setModalOpen(true);
   };
 
-  const openEdit = (row: Row) => {
-    setEditing(row);
-    setDraft({
-      name: row.name,
-      category: row.category,
-      price: String(row.price),
-      stock: String(row.stock),
-    });
+  const openEdit = (product: Product) => {
+    setEditingId(product.id);
+    setDraft({ ...product, images: [...product.images] });
     setModalOpen(true);
   };
 
   const save = () => {
-    const price = Number(draft.price) || 0;
-    const stock = Number(draft.stock) || 0;
-    if (editing) {
-      setRows((prev) =>
-        prev.map((r) =>
-          r.id === editing.id
-            ? {
-                ...r,
-                name: draft.name || r.name,
-                category: draft.category,
-                price,
-                stock,
-                status: stock === 0 ? 'Out of Stock' : 'Active',
-              }
-            : r
-        )
-      );
+    if (!draft.name.trim()) {
+      setDraft((prev) => ({ ...prev, name: prev.name || 'Untitled product' }));
+      return;
+    }
+    if (editingId) {
+      let nextId = draft.id.trim() || slugify(draft.name);
+      if (nextId !== editingId && products.some((p) => p.id === nextId)) {
+        let n = 1;
+        const base = nextId;
+        while (products.some((p) => p.id === nextId && p.id !== editingId)) {
+          nextId = `${base}-${n}`;
+          n += 1;
+        }
+      }
+      updateProduct(editingId, { ...draft, id: nextId });
     } else {
-      setRows((prev) => [
-        {
-          id: `new-${Date.now()}`,
-          name: draft.name || 'Untitled Product',
-          category: draft.category,
-          price,
-          stock,
-          sold: 0,
-          image:
-            'https://readdy.ai/api/search-image?query=Luxury%20beauty%20product%20bottle%20with%20gold%20accents%20on%20a%20deep%20black%20studio%20background%20with%20soft%20crimson%20and%20rose%20pink%20glow%2C%20cinematic%20elegant%20lighting%2C%20high-end%20minimalist%20product%20photography&width=200&height=250&seq=deesse-admin-new&orientation=portrait',
-          status: stock === 0 ? 'Out of Stock' : 'Draft',
-        },
-        ...prev,
-      ]);
+      const base = draft.id.trim() || slugify(draft.name);
+      let nextId = base;
+      let n = 1;
+      while (products.some((p) => p.id === nextId)) {
+        nextId = `${base}-${n}`;
+        n += 1;
+      }
+      addProduct({ ...draft, id: nextId });
     }
     setModalOpen(false);
   };
 
   const confirmDelete = () => {
     if (deleteTarget) {
-      setRows((prev) => prev.filter((r) => r.id !== deleteTarget.id));
+      deleteProduct(deleteTarget.id);
       setDeleteTarget(null);
     }
   };
 
-  const activeCount = rows.filter((r) => r.status === 'Active').length;
-  const lowStock = rows.filter((r) => r.stock > 0 && r.stock <= 10).length;
+  const savePreview = () => {
+    updateSettings(preview);
+    setPreviewSaved(true);
+    setTimeout(() => setPreviewSaved(false), 2000);
+  };
+
+  const activeCount = products.filter((p) => p.status === 'Active').length;
+  const draftCount = products.filter((p) => p.status === 'Draft').length;
+  const lowStock = products.filter((p) => p.stock > 0 && p.stock <= 10).length;
 
   return (
     <div className="space-y-6">
       {/* Summaries */}
-      <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-5 lg:grid-cols-5">
         {[
-          { label: 'Total products', value: rows.length, icon: 'ri-shopping-bag-3-line' },
+          { label: 'Total products', value: products.length, icon: 'ri-shopping-bag-3-line' },
           { label: 'Active', value: activeCount, icon: 'ri-checkbox-circle-line' },
+          { label: 'Drafts', value: draftCount, icon: 'ri-draft-line' },
           { label: 'Low stock', value: lowStock, icon: 'ri-alert-line' },
-          { label: 'Out of stock', value: rows.filter((r) => r.stock === 0).length, icon: 'ri-close-circle-line' },
+          {
+            label: 'Out of stock',
+            value: products.filter((p) => p.status === 'Out of Stock' || p.stock === 0).length,
+            icon: 'ri-close-circle-line',
+          },
         ].map((s) => (
           <div
             key={s.label}
@@ -150,8 +182,178 @@ export default function AdminProducts() {
         ))}
       </div>
 
+      {/* Link preview */}
+      <Panel
+        title="Link preview description"
+        subtitle="Shown when the website URL is shared on Discord, WhatsApp, iMessage and social platforms."
+        action={
+          <div className="flex items-center gap-2">
+            {previewSaved && <span className="text-xs text-accent-300">Saved</span>}
+            <button
+              type="button"
+              onClick={() => {
+                setPreview(DEFAULT_SITE_SETTINGS);
+                resetSettings();
+              }}
+              className="rounded-lg border border-background-700 px-3 py-2 text-xs text-foreground-300 hover:border-foreground-400 transition-colors cursor-pointer"
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              onClick={savePreview}
+              className="rounded-lg bg-primary-500 px-4 py-2 text-xs font-medium text-foreground-50 hover:bg-primary-600 transition-colors cursor-pointer"
+            >
+              Save preview
+            </button>
+          </div>
+        }
+      >
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs uppercase tracking-[0.15em] text-foreground-500">
+                Preview title
+              </label>
+              <input
+                value={preview.linkPreviewTitle}
+                onChange={(e) =>
+                  setPreview((prev) => ({ ...prev, linkPreviewTitle: e.target.value }))
+                }
+                className="mt-2 w-full rounded-lg border border-background-800 bg-background-950 px-4 py-2.5 text-sm text-foreground-100 outline-none focus:border-primary-500/60"
+              />
+            </div>
+            <div>
+              <label className="text-xs uppercase tracking-[0.15em] text-foreground-500">
+                Preview description
+              </label>
+              <textarea
+                value={preview.linkPreviewDescription}
+                onChange={(e) =>
+                  setPreview((prev) => ({ ...prev, linkPreviewDescription: e.target.value }))
+                }
+                rows={4}
+                className="mt-2 w-full resize-y rounded-lg border border-background-800 bg-background-950 px-4 py-2.5 text-sm leading-relaxed text-foreground-100 outline-none focus:border-primary-500/60"
+              />
+            </div>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-[0.15em] text-foreground-500">
+              Live preview
+            </p>
+            <div className="mt-2 overflow-hidden rounded-xl border border-background-700 bg-background-800">
+              <div className="h-32 w-full bg-gradient-to-br from-primary-700/60 via-background-800 to-accent-700/40" />
+              <div className="space-y-1.5 border-t border-background-700 p-4">
+                <p className="text-[11px] uppercase tracking-[0.15em] text-foreground-500">
+                  deesse.com
+                </p>
+                <p className="font-heading text-lg text-foreground-50">
+                  {preview.linkPreviewTitle || DEFAULT_SITE_SETTINGS.linkPreviewTitle}
+                </p>
+                <p className="text-sm text-foreground-400 line-clamp-3">
+                  {preview.linkPreviewDescription || DEFAULT_SITE_SETTINGS.linkPreviewDescription}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Panel>
+
+      {/* Categories */}
+      <Panel
+        title="Categories"
+        subtitle="Rename, add, or remove the categories customers can browse."
+      >
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            value={newCategory}
+            onChange={(e) => setNewCategory(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addCategory(newCategory);
+                setNewCategory('');
+              }
+            }}
+            placeholder="New category name"
+            className="flex-1 rounded-lg border border-background-800 bg-background-950 px-4 py-2.5 text-sm text-foreground-100 outline-none focus:border-primary-500/60"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              addCategory(newCategory);
+              setNewCategory('');
+            }}
+            className="whitespace-nowrap rounded-lg border border-background-700 px-4 py-2.5 text-xs text-foreground-200 hover:border-foreground-400 transition-colors cursor-pointer"
+          >
+            Add category
+          </button>
+        </div>
+
+        <ul className="mt-4 space-y-2">
+          {categories.map((c) => (
+            <li
+              key={c}
+              className="flex flex-wrap items-center gap-2 rounded-lg border border-background-800 bg-background-950/50 px-3 py-2"
+            >
+              {editingCat === c ? (
+                <>
+                  <input
+                    value={catValue}
+                    autoFocus
+                    onChange={(e) => setCatValue(e.target.value)}
+                    className="flex-1 rounded-md border border-background-700 bg-background-950 px-3 py-1.5 text-sm text-foreground-100 outline-none focus:border-primary-500/60"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      renameCategory(c, catValue);
+                      setEditingCat(null);
+                    }}
+                    className="rounded-md bg-primary-500 px-3 py-1.5 text-xs text-foreground-50 hover:bg-primary-600 transition-colors cursor-pointer"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingCat(null)}
+                    className="rounded-md border border-background-700 px-3 py-1.5 text-xs text-foreground-300 hover:border-foreground-400 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1 text-sm text-foreground-200">{c}</span>
+                  <span className="text-xs text-foreground-600">
+                    {products.filter((p) => p.category === c).length} products
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCat(c);
+                      setCatValue(c);
+                    }}
+                    className="rounded-md border border-background-700 px-3 py-1.5 text-xs text-foreground-300 hover:border-foreground-400 transition-colors cursor-pointer"
+                  >
+                    Rename
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteCategory(c)}
+                    className="rounded-md border border-background-700 px-3 py-1.5 text-xs text-primary-200 hover:border-primary-400 transition-colors cursor-pointer"
+                  >
+                    Remove
+                  </button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      </Panel>
+
+      {/* Products */}
       <Panel bodyClassName="p-0">
-        {/* Toolbar */}
         <div className="flex flex-col gap-3 border-b border-background-800 p-4 lg:flex-row lg:items-center">
           <div className="relative flex-1">
             <i className="ri-search-line pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-foreground-500" />
@@ -167,8 +369,10 @@ export default function AdminProducts() {
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="rounded-lg border border-background-800 bg-background-900 px-3 py-2.5 text-sm text-foreground-200 outline-none focus:border-primary-500/60 cursor-pointer"
+            className={inputClass}
+            aria-label="Filter by category"
           >
+            <option value="All">All categories</option>
             {categories.map((c) => (
               <option key={c} value={c}>
                 {c}
@@ -179,7 +383,8 @@ export default function AdminProducts() {
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as typeof sort)}
-            className="rounded-lg border border-background-800 bg-background-900 px-3 py-2.5 text-sm text-foreground-200 outline-none focus:border-primary-500/60 cursor-pointer"
+            className={inputClass}
+            aria-label="Sort products"
           >
             <option value="name">Name (A–Z)</option>
             <option value="price-asc">Price: Low to High</option>
@@ -214,10 +419,10 @@ export default function AdminProducts() {
 
         {view === 'table' ? (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-left text-sm">
+            <table className="w-full min-w-[900px] text-left text-sm">
               <thead>
                 <tr className="border-b border-background-800">
-                  {['Product', 'Category', 'Price', 'Stock', 'Sold', 'Status', ''].map((h) => (
+                  {['Product', 'Category', 'Price', 'Stock', 'Status', 'Featured', ''].map((h) => (
                     <th
                       key={h}
                       className="whitespace-nowrap px-4 py-3 text-[11px] font-medium uppercase tracking-[0.15em] text-foreground-500"
@@ -236,36 +441,80 @@ export default function AdminProducts() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="h-11 w-9 shrink-0 overflow-hidden rounded-md bg-background-900">
-                          <img src={r.image} alt={r.name} className="h-full w-full object-cover object-top" />
+                          {r.image ? (
+                            <img
+                              src={r.image}
+                              alt={r.name}
+                              className="h-full w-full object-cover object-top"
+                            />
+                          ) : (
+                            <span className="flex h-full w-full items-center justify-center text-foreground-600">
+                              <i className="ri-image-line" />
+                            </span>
+                          )}
                         </div>
-                        <span className="font-medium text-foreground-100">{r.name}</span>
+                        <div className="min-w-0">
+                          <span className="block truncate font-medium text-foreground-100">
+                            {r.name}
+                          </span>
+                          <span className="font-mono text-xs text-foreground-600">{r.id}</span>
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-foreground-300">{r.category}</td>
-                    <td className="px-4 py-3 font-heading text-foreground-50">${r.price}</td>
+                    <td className="px-4 py-3 font-heading text-foreground-50">
+                      ${r.price}
+                      {r.compareAtPrice ? (
+                        <span className="ml-2 text-xs text-foreground-600 line-through">
+                          ${r.compareAtPrice}
+                        </span>
+                      ) : null}
+                    </td>
                     <td className="px-4 py-3">
-                      <span className={r.stock === 0 ? 'text-primary-300' : r.stock <= 10 ? 'text-accent-300' : 'text-foreground-200'}>
+                      <span
+                        className={
+                          r.stock === 0
+                            ? 'text-primary-300'
+                            : r.stock <= 10
+                              ? 'text-accent-300'
+                              : 'text-foreground-200'
+                        }
+                      >
                         {r.stock}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-foreground-400">{r.sold}</td>
                     <td className="px-4 py-3">
                       <Badge tone={toneForStatus(r.status)}>{r.status}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      {r.featured ? (
+                        <i className="ri-star-fill text-accent-400" aria-label="Featured" />
+                      ) : (
+                        <span className="text-foreground-700">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"
                           onClick={() => openEdit(r)}
-                          aria-label="Edit"
+                          aria-label={`Edit ${r.name}`}
                           className="flex h-8 w-8 items-center justify-center rounded-md text-foreground-400 hover:bg-background-800 hover:text-foreground-50 transition-colors cursor-pointer"
                         >
                           <i className="ri-edit-line" />
                         </button>
                         <button
                           type="button"
+                          onClick={() => duplicateProduct(r.id)}
+                          aria-label={`Duplicate ${r.name}`}
+                          className="flex h-8 w-8 items-center justify-center rounded-md text-foreground-400 hover:bg-background-800 hover:text-foreground-50 transition-colors cursor-pointer"
+                        >
+                          <i className="ri-file-copy-line" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => setDeleteTarget(r)}
-                          aria-label="Delete"
+                          aria-label={`Delete ${r.name}`}
                           className="flex h-8 w-8 items-center justify-center rounded-md text-foreground-400 hover:bg-background-800 hover:text-primary-300 transition-colors cursor-pointer"
                         >
                           <i className="ri-delete-bin-line" />
@@ -285,20 +534,33 @@ export default function AdminProducts() {
                 className="group overflow-hidden rounded-xl border border-background-800 bg-background-900/50 transition-colors hover:border-background-700"
               >
                 <div className="relative aspect-[4/5] overflow-hidden bg-background-900">
-                  <img
-                    src={r.image}
-                    alt={r.name}
-                    className="h-full w-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
-                  />
+                  {r.image ? (
+                    <img
+                      src={r.image}
+                      alt={r.name}
+                      className="h-full w-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
+                    />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-2xl text-foreground-700">
+                      <i className="ri-image-line" />
+                    </span>
+                  )}
                   <span className="absolute left-3 top-3">
                     <Badge tone={toneForStatus(r.status)}>{r.status}</Badge>
                   </span>
+                  {r.featured && (
+                    <span className="absolute right-3 top-3 rounded-full bg-background-950/80 p-1.5 text-accent-400">
+                      <i className="ri-star-fill text-xs" />
+                    </span>
+                  )}
                 </div>
                 <div className="p-4">
                   <p className="text-[10px] uppercase tracking-[0.2em] text-foreground-500">
                     {r.category}
                   </p>
-                  <h3 className="mt-1 truncate font-heading text-lg text-foreground-50">{r.name}</h3>
+                  <h3 className="mt-1 truncate font-heading text-lg text-foreground-50">
+                    {r.name}
+                  </h3>
                   <div className="mt-2 flex items-center justify-between">
                     <span className="font-heading text-lg text-foreground-50">${r.price}</span>
                     <span className="text-xs text-foreground-500">{r.stock} in stock</span>
@@ -315,7 +577,7 @@ export default function AdminProducts() {
                       type="button"
                       onClick={() => setDeleteTarget(r)}
                       className="flex h-8 w-8 items-center justify-center rounded-md border border-background-700 text-foreground-400 hover:text-primary-300 transition-colors cursor-pointer"
-                      aria-label="Delete"
+                      aria-label={`Delete ${r.name}`}
                     >
                       <i className="ri-delete-bin-line" />
                     </button>
@@ -327,18 +589,47 @@ export default function AdminProducts() {
         )}
 
         {filtered.length === 0 && (
-          <p className="py-16 text-center text-sm text-foreground-500">No products match your filters.</p>
+          <p className="py-16 text-center text-sm text-foreground-500">
+            No products match your filters.
+          </p>
         )}
+
+        <div className="flex items-center justify-between gap-3 border-t border-background-800 p-4">
+          <p className="text-xs text-foreground-600">
+            Changes save to this browser and update the storefront instantly.
+          </p>
+          <button
+            type="button"
+            onClick={() => setResetOpen(true)}
+            className="whitespace-nowrap rounded-lg border border-background-700 px-3 py-2 text-xs text-foreground-300 hover:border-foreground-400 transition-colors cursor-pointer"
+          >
+            Reset catalog to defaults
+          </button>
+        </div>
       </Panel>
 
       {/* Create / edit modal */}
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editing ? 'Edit product' : 'Add product'}
-        subtitle={editing ? editing.name : 'Create a new catalog entry'}
+        title={editingId ? 'Edit product' : 'Add product'}
+        subtitle={editingId ? draft.name || editingId : 'Create a new catalog entry'}
+        size="lg"
         footer={
           <>
+            {editingId && (
+              <button
+                type="button"
+                onClick={() => {
+                  const target = products.find((p) => p.id === editingId);
+                  if (target) setDeleteTarget(target);
+                  setModalOpen(false);
+                }}
+                className="mr-auto rounded-lg border border-background-700 px-4 py-2 text-sm text-primary-200 hover:border-primary-400 transition-colors cursor-pointer"
+              >
+                Delete
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setModalOpen(false)}
@@ -351,58 +642,12 @@ export default function AdminProducts() {
               onClick={save}
               className="rounded-lg bg-primary-500 px-5 py-2 text-sm font-medium text-foreground-50 hover:bg-primary-600 transition-colors cursor-pointer"
             >
-              {editing ? 'Save changes' : 'Create product'}
+              {editingId ? 'Save changes' : 'Create product'}
             </button>
           </>
         }
       >
-        <div className="space-y-4">
-          <div>
-            <label className="text-xs uppercase tracking-[0.15em] text-foreground-500">Name</label>
-            <input
-              value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              placeholder="e.g. Velvet Rouge Lipstick"
-              className="mt-2 w-full rounded-lg border border-background-800 bg-background-950 px-4 py-2.5 text-sm text-foreground-100 outline-none focus:border-primary-500/60"
-            />
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div>
-              <label className="text-xs uppercase tracking-[0.15em] text-foreground-500">Category</label>
-              <select
-                value={draft.category}
-                onChange={(e) => setDraft({ ...draft, category: e.target.value })}
-                className="mt-2 w-full rounded-lg border border-background-800 bg-background-950 px-4 py-2.5 text-sm text-foreground-100 outline-none focus:border-primary-500/60 cursor-pointer"
-              >
-                {categories
-                  .filter((c) => c !== 'All')
-                  .map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs uppercase tracking-[0.15em] text-foreground-500">Price ($)</label>
-              <input
-                type="number"
-                value={draft.price}
-                onChange={(e) => setDraft({ ...draft, price: e.target.value })}
-                className="mt-2 w-full rounded-lg border border-background-800 bg-background-950 px-4 py-2.5 text-sm text-foreground-100 outline-none focus:border-primary-500/60"
-              />
-            </div>
-            <div>
-              <label className="text-xs uppercase tracking-[0.15em] text-foreground-500">Stock</label>
-              <input
-                type="number"
-                value={draft.stock}
-                onChange={(e) => setDraft({ ...draft, stock: e.target.value })}
-                className="mt-2 w-full rounded-lg border border-background-800 bg-background-950 px-4 py-2.5 text-sm text-foreground-100 outline-none focus:border-primary-500/60"
-              />
-            </div>
-          </div>
-        </div>
+        <ProductForm draft={draft} onChange={applyDraft} categories={categories} />
       </Modal>
 
       {/* Delete confirmation */}
@@ -433,7 +678,41 @@ export default function AdminProducts() {
         <p className="text-sm text-foreground-300">
           Are you sure you want to remove{' '}
           <span className="text-foreground-50">{deleteTarget?.name}</span> from the catalog? This
-          cannot be undone.
+          removes it from the storefront and cannot be undone.
+        </p>
+      </Modal>
+
+      {/* Reset confirmation */}
+      <Modal
+        open={resetOpen}
+        onClose={() => setResetOpen(false)}
+        title="Reset catalog"
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setResetOpen(false)}
+              className="rounded-lg border border-background-700 px-4 py-2 text-sm text-foreground-200 hover:border-foreground-400 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                resetProducts();
+                setResetOpen(false);
+              }}
+              className="rounded-lg bg-primary-500 px-5 py-2 text-sm font-medium text-foreground-50 hover:bg-primary-600 transition-colors cursor-pointer"
+            >
+              Reset everything
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-foreground-300">
+          This discards all your product edits and restores the original demo catalog. This cannot
+          be undone.
         </p>
       </Modal>
     </div>

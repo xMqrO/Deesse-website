@@ -2,10 +2,13 @@ import { Link } from 'react-router-dom';
 import Reveal from '@/components/base/Reveal';
 import Parallax from '@/components/base/Parallax';
 import MagneticButton from '@/components/base/MagneticButton';
-import { products } from '@/mocks/products';
+import { useStorefrontProducts } from '@/context/ProductContext';
 
 export default function ProductSpotlight() {
-  const hero = products.find((p) => p.id === 'rose-eternelle-parfum') ?? products[3];
+  const products = useStorefrontProducts();
+  const hero = products.find((p) => p.id === 'rose-eternelle-parfum') ?? products[3] ?? products[0];
+
+  if (!hero) return null;
 
   const notes = [
     { label: 'Top', value: 'Saffron · Bergamot' },

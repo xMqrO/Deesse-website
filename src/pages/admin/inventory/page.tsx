@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import Panel from '@/components/admin/ui/Panel';
 import Badge, { toneForStatus } from '@/components/admin/ui/Badge';
 import Modal from '@/components/admin/ui/Modal';
-import { products as catalog } from '@/mocks/products';
+import { useProducts } from '@/context/ProductContext';
 
 interface StockRow {
   id: string;
@@ -15,27 +15,28 @@ interface StockRow {
   image: string;
 }
 
-const initialStock: StockRow[] = catalog.map((p, i) => {
-  const stock = (i * 13 + 7) % 46;
-  return {
-    id: p.id,
-    name: p.name,
-    sku: `DS-${String(1000 + i * 7)}`,
-    category: p.category,
-    stock,
-    sold: ((i * 29 + 11) % 420) + 40,
-    reorderAt: 12,
-    image: p.image,
-  };
-});
-
 type Filter = 'all' | 'low' | 'out';
 
 export default function AdminInventory() {
-  const [rows, setRows] = useState<StockRow[]>(initialStock);
+  const { products, updateProduct } = useProducts();
   const [filter, setFilter] = useState<Filter>('all');
   const [restock, setRestock] = useState<StockRow | null>(null);
   const [amount, setAmount] = useState('50');
+
+  const rows = useMemo<StockRow[]>(
+    () =>
+      products.map((p, i) => ({
+        id: p.id,
+        name: p.name,
+        sku: p.sku || `DS-${String(1000 + i * 7)}`,
+        category: p.category,
+        stock: p.stock,
+        sold: ((i * 29 + 11) % 420) + 40,
+        reorderAt: 12,
+        image: p.image,
+      })),
+    [products]
+  );
 
   const filtered = useMemo(() => {
     if (filter === 'low') return rows.filter((r) => r.stock > 0 && r.stock <= r.reorderAt);
@@ -49,7 +50,7 @@ export default function AdminInventory() {
   const applyRestock = () => {
     if (!restock) return;
     const qty = Number(amount) || 0;
-    setRows((prev) => prev.map((r) => (r.id === restock.id ? { ...r, stock: r.stock + qty } : r)));
+    updateProduct(restock.id, { stock: restock.stock + qty });
     setRestock(null);
     setAmount('50');
   };

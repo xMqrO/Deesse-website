@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { products } from '@/mocks/products';
+import { useStorefrontProducts } from '@/context/ProductContext';
 
 interface SearchOverlayProps {
   open: boolean;
@@ -8,6 +8,7 @@ interface SearchOverlayProps {
 }
 
 export default function SearchOverlay({ open, onClose }: SearchOverlayProps) {
+  const products = useStorefrontProducts();
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -44,7 +45,7 @@ export default function SearchOverlay({ open, onClose }: SearchOverlayProps) {
           p.tags.join(' ').toLowerCase().includes(q)
       )
       .slice(0, 8);
-  }, [query]);
+  }, [query, products]);
 
   return (
     <div

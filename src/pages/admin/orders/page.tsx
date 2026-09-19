@@ -3,18 +3,29 @@ import Panel from '@/components/admin/ui/Panel';
 import Badge, { toneForStatus } from '@/components/admin/ui/Badge';
 import Modal from '@/components/admin/ui/Modal';
 import { adminOrders, type AdminOrder } from '@/mocks/admin';
+import { useOrders } from '@/context/OrdersContext';
 
 const STATUS_TABS = ['All', 'Paid', 'Pending', 'Shipped', 'Refunded', 'Cancelled'] as const;
 
 export default function AdminOrders() {
   const [orders, setOrders] = useState<AdminOrder[]>(adminOrders);
+  const { orders: liveOrders, updateOrderStatus } = useOrders();
   const [tab, setTab] = useState<(typeof STATUS_TABS)[number]>('All');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<AdminOrder | null>(null);
 
+  const allOrders = useMemo<AdminOrder[]>(() => {
+    const merged: AdminOrder[] = [...orders, ...liveOrders];
+    return merged.sort((a, b) => {
+      const byDate = b.date.localeCompare(a.date);
+      if (byDate !== 0) return byDate;
+      return b.id.localeCompare(a.id);
+    });
+  }, [orders, liveOrders]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return orders.filter(
+    return allOrders.filter(
       (o) =>
         (tab === 'All' || o.status === tab) &&
         (q === '' ||
@@ -22,14 +33,20 @@ export default function AdminOrders() {
           o.customer.toLowerCase().includes(q) ||
           o.email.toLowerCase().includes(q))
     );
-  }, [orders, tab, query]);
+  }, [allOrders, tab, query]);
 
-  const revenue = orders
+  const revenue = allOrders
     .filter((o) => o.status !== 'Cancelled' && o.status !== 'Refunded')
     .reduce((sum, o) => sum + o.total, 0);
 
+  const isLive = (id: string) => liveOrders.some((o) => o.id === id);
+
   const updateStatus = (id: string, status: AdminOrder['status']) => {
-    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
+    if (isLive(id)) {
+      updateOrderStatus(id, status);
+    } else {
+      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
+    }
     setSelected((prev) => (prev && prev.id === id ? { ...prev, status } : prev));
   };
 
@@ -37,10 +54,10 @@ export default function AdminOrders() {
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
         {[
-          { label: 'Total orders', value: orders.length, icon: 'ri-file-list-3-line' },
+          { label: 'Total orders', value: allOrders.length, icon: 'ri-file-list-3-line' },
           { label: 'Net revenue', value: `$${revenue.toLocaleString()}`, icon: 'ri-money-dollar-circle-line' },
-          { label: 'Pending', value: orders.filter((o) => o.status === 'Pending').length, icon: 'ri-time-line' },
-          { label: 'Refunded', value: orders.filter((o) => o.status === 'Refunded').length, icon: 'ri-refund-2-line' },
+          { label: 'Pending', value: allOrders.filter((o) => o.status === 'Pending').length, icon: 'ri-time-line' },
+          { label: 'Refunded', value: allOrders.filter((o) => o.status === 'Refunded').length, icon: 'ri-refund-2-line' },
         ].map((s) => (
           <div key={s.label} className="rounded-xl border border-background-800 bg-background-900/50 p-5">
             <div className="flex items-center justify-between">

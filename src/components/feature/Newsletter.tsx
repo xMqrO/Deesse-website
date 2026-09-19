@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { apiPost } from '@/lib/api';
 
 const FORM_URL = 'https://readdy.ai/api/form/dampj5t1jbh5ebt7f9eg';
 
@@ -24,6 +25,17 @@ export default function Newsletter({ align = 'left', title, subtitle }: Newslett
       return;
     }
     fd.delete('company_alt');
+
+    const email = String(fd.get('email') ?? '').trim();
+
+    try {
+      await apiPost('/api/subscribe', { email });
+      setStatus('success');
+      form.reset();
+      return;
+    } catch {
+      /* endpoint not reachable in dev — fall back to the form provider below */
+    }
 
     const body = new URLSearchParams();
     fd.forEach((value, key) => {

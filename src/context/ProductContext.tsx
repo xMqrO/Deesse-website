@@ -14,6 +14,7 @@ import {
   slugify,
   type Product,
 } from '@/mocks/products';
+import { fetchCatalog, pushCatalog } from '@/lib/db';
 
 const PRODUCTS_KEY = 'deesse-products';
 const CATEGORIES_KEY = 'deesse-categories';
@@ -77,6 +78,28 @@ const ProductContext = createContext<ProductContextValue | null>(null);
 export function ProductProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>(loadProducts);
   const [categories, setCategories] = useState<string[]>(loadCategories);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const snapshot = await fetchCatalog();
+      if (cancelled) return;
+      if (snapshot) {
+        if (snapshot.products.length > 0) setProducts(snapshot.products);
+        if (snapshot.categories.length > 0) setCategories(snapshot.categories);
+      }
+      setHydrated(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    pushCatalog(products, categories);
+  }, [hydrated, products, categories]);
 
   useEffect(() => {
     try {

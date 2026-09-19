@@ -7,6 +7,7 @@ import { CartProvider } from "@/context/CartContext";
 import { SocialProvider } from "@/context/SocialContext";
 import { ProductProvider } from "@/context/ProductContext";
 import { SiteSettingsProvider } from "@/context/SiteSettingsContext";
+import { OrdersProvider } from "@/context/OrdersContext";
 
 function ScrollManager() {
   const { pathname, hash } = useLocation();
@@ -28,14 +29,16 @@ function App() {
     <I18nextProvider i18n={i18n}>
       <SiteSettingsProvider>
         <ProductProvider>
-          <SocialProvider>
-            <CartProvider>
-              <BrowserRouter basename={__BASE_PATH__}>
-                <ScrollManager />
-                <AppRoutes />
-              </BrowserRouter>
-            </CartProvider>
-          </SocialProvider>
+          <OrdersProvider>
+            <SocialProvider>
+              <CartProvider>
+                <BrowserRouter basename={__BASE_PATH__}>
+                  <ScrollManager />
+                  <AppRoutes />
+                </BrowserRouter>
+              </CartProvider>
+            </SocialProvider>
+          </OrdersProvider>
         </ProductProvider>
       </SiteSettingsProvider>
     </I18nextProvider>

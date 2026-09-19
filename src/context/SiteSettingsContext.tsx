@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { fetchCatalog, pushSettings } from '@/lib/db';
 
 const STORAGE_KEY = 'deesse-site-settings';
 
@@ -65,6 +66,28 @@ const SiteSettingsContext = createContext<SiteSettingsContextValue | null>(null)
 
 export function SiteSettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<SiteSettings>(loadSettings);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const snapshot = await fetchCatalog();
+      if (cancelled || !snapshot) {
+        setHydrated(true);
+        return;
+      }
+      setSettings(snapshot.settings);
+      setHydrated(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    pushSettings(settings);
+  }, [hydrated, settings]);
 
   useEffect(() => {
     try {

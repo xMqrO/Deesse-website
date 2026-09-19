@@ -32,7 +32,7 @@ export default function ProductDetail() {
 
   const related = useMemo(
     () => products.filter((p) => p.category === product?.category && p.id !== product?.id).slice(0, 4),
-    [product]
+    [products, product]
   );
 
   if (!product) {

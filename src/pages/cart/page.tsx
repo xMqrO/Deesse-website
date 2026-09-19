@@ -18,7 +18,6 @@ export default function Cart() {
     updateQuantity,
     removeFromCart,
   } = useCart();
-  const [notice, setNotice] = useState(false);
   const [code, setCode] = useState('');
 
   const remaining = FREE_SHIPPING - subtotal;
@@ -230,20 +229,12 @@ export default function Cart() {
                 )}
               </div>
 
-              <button
-                type="button"
-                onClick={() => setNotice(true)}
-                className="mt-6 w-full whitespace-nowrap rounded-full bg-primary-500 px-6 py-3.5 text-sm font-medium uppercase tracking-[0.15em] text-foreground-50 hover:bg-primary-600 transition-colors cursor-pointer"
+              <Link
+                to="/checkout"
+                className="mt-6 block w-full whitespace-nowrap rounded-full bg-primary-500 px-6 py-3.5 text-center text-sm font-medium uppercase tracking-[0.15em] text-foreground-50 hover:bg-primary-600 transition-colors cursor-pointer"
               >
                 Proceed to Checkout
-              </button>
-
-              {notice && (
-                <p className="mt-4 rounded-lg bg-background-800/70 p-3 text-xs leading-relaxed text-foreground-300 animate-fade-in">
-                  Secure checkout is the final step — connect your payment to unlock it. Everything
-                  in your bag is safely saved.
-                </p>
-              )}
+              </Link>
 
               <p className="mt-4 flex items-center justify-center gap-2 text-xs text-foreground-500">
                 <i className="ri-lock-line" /> Encrypted &amp; secure

@@ -6,6 +6,8 @@ import Home from "@/pages/home/page";
 import Shop from "@/pages/shop/page";
 import ProductDetail from "@/pages/product/page";
 import Cart from "@/pages/cart/page";
+import Checkout from "@/pages/checkout/page";
+import CheckoutSuccess from "@/pages/checkout/success";
 import FAQ from "@/pages/faq/page";
 import Privacy from "@/pages/privacy/page";
 import AdminOverview from "@/pages/admin/page";
@@ -28,6 +30,8 @@ const routes: RouteObject[] = [
       { path: "shop", element: <Shop /> },
       { path: "product/:id", element: <ProductDetail /> },
       { path: "cart", element: <Cart /> },
+      { path: "checkout", element: <Checkout /> },
+      { path: "checkout/success", element: <CheckoutSuccess /> },
       { path: "faq", element: <FAQ /> },
       { path: "privacy", element: <Privacy /> },
     ],
